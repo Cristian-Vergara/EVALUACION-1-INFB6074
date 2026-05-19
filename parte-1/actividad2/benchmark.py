@@ -5,6 +5,8 @@ import random
 import numpy as np
 import gc
 from pathlib import Path
+import matplotlib.pyplot as plt
+
 
 # ============================================================
 # Configuración de tamaños
@@ -15,8 +17,6 @@ from pathlib import Path
 N_PARTICULAS = [1500, 2000, 2800, 4000, 5500]
 
 # Memoria (acceso secuencial y aleatorio): número de elementos float64.
-# En MB: ~2.4 MB, ~12 MB, ~56 MB, ~240 MB, ~1 GB.
-# Cruza la caché L2 (~16 MB) entre el 2do y el 3er tamaño.
 LADOS_MATRIZ = [500, 1200, 2800, 6000, 11000]
 
 # Disco (escritura/lectura): tamaño del archivo en MB.
@@ -376,3 +376,133 @@ def benchmark_disco(verbose=True):
             pass
     
     return registros
+
+# ============================================================
+# Visualizaciones
+# ============================================================
+
+
+
+def graficar_cpu(df_cpu, output_dir="visualizaciones"):
+    """Dos gráficos del escenario CPU: throughput constante + escalado O(N²)."""
+    Path(output_dir).mkdir(exist_ok=True)
+    
+    resumen = df_cpu.groupby('tamano_n').agg(
+        tiempo_mean=('tiempo_s', 'mean'),
+        tiempo_std=('tiempo_s', 'std'),
+        throughput_mean=('throughput_pares_s', 'mean'),
+        throughput_std=('throughput_pares_s', 'std'),
+        pares=('tamano_pares', 'first'),
+    ).reset_index()
+    
+    # Gráfico 1: throughput vs trabajo 
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.errorbar(resumen['pares'], resumen['throughput_mean'] / 1e6,
+                yerr=resumen['throughput_std'] / 1e6,
+                marker='o', capsize=4, linewidth=2)
+    ax.set_xscale('log')
+    ax.set_xlabel('Pares calculados (trabajo total)')
+    ax.set_ylabel('Throughput (millones de pares/s)')
+    ax.set_title('CPU (N-body): throughput vs trabajo\n'
+                 'Throughput constante → tarea CPU-bound confirmada')
+    ax.set_ylim(0, max(resumen['throughput_mean'] / 1e6) * 1.3)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(f"{output_dir}/01_cpu_throughput.png", dpi=120, bbox_inches='tight')
+    plt.show()
+    
+    # Gráfico 2: tiempo vs N 
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.errorbar(resumen['tamano_n'], resumen['tiempo_mean'],
+                yerr=resumen['tiempo_std'],
+                marker='o', capsize=4, linewidth=2, label='Medido')
+    
+    # Línea de referencia O(N²)
+    n_ref = resumen['tamano_n'].iloc[0]
+    t_ref = resumen['tiempo_mean'].iloc[0]
+    import numpy as np
+    n_range = np.linspace(resumen['tamano_n'].min(), resumen['tamano_n'].max(), 100)
+    t_pred = t_ref * (n_range / n_ref) ** 2
+    ax.plot(n_range, t_pred, '--', alpha=0.5, label='Referencia O(N²)')
+    
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('N partículas')
+    ax.set_ylabel('Tiempo (s)')
+    ax.set_title('CPU (N-body): tiempo vs N\n'
+                 'Crecimiento cuadrático confirma O(N²)')
+    ax.legend()
+    ax.grid(True, alpha=0.3, which='both')
+    fig.tight_layout()
+    fig.savefig(f"{output_dir}/02_cpu_escalado.png", dpi=120, bbox_inches='tight')
+    plt.show()
+
+
+def graficar_memoria(df_mem, output_dir="visualizaciones"):
+    """Acceso secuencial (filas) vs no-secuencial (columnas)."""
+    Path(output_dir).mkdir(exist_ok=True)
+    
+    resumen = df_mem.groupby(['escenario', 'tamano_mb']).agg(
+        throughput_mean=('throughput_mb_s', 'mean'),
+        throughput_std=('throughput_mb_s', 'std'),
+    ).reset_index()
+    
+    fig, ax = plt.subplots(figsize=(9, 6))
+    for esc, grp in resumen.groupby('escenario'):
+        nombre = esc.replace('memoria_', '').capitalize()
+        ax.errorbar(grp['tamano_mb'], grp['throughput_mean'],
+                    yerr=grp['throughput_std'],
+                    marker='o', capsize=4, linewidth=2, label=nombre)
+    
+    # Línea de referencia en L2 cache (~16 MB)
+    ax.axvline(x=16, color='red', linestyle=':', alpha=0.5, label='Caché L2 (~16 MB)')
+    
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('Tamaño de matriz (MB)')
+    ax.set_ylabel('Throughput (MB/s)')
+    ax.set_title('Memoria: acceso secuencial (filas) vs no-secuencial (columnas)\n'
+                 'Gap entre curvas crece más allá de L2 → jerarquía de memoria visible')
+    ax.legend()
+    ax.grid(True, alpha=0.3, which='both')
+    fig.tight_layout()
+    fig.savefig(f"{output_dir}/03_memoria_acceso.png", dpi=120, bbox_inches='tight')
+    plt.show()
+
+
+def graficar_disco(df_disco, output_dir="visualizaciones"):
+    """Cuatro curvas: lectura/escritura × binario/CSV."""
+    Path(output_dir).mkdir(exist_ok=True)
+    
+    resumen = df_disco.groupby(['escenario', 'tamano_mb']).agg(
+        throughput_mean=('throughput_mb_s', 'mean'),
+        throughput_std=('throughput_mb_s', 'std'),
+    ).reset_index()
+    
+    fig, ax = plt.subplots(figsize=(9, 6))
+    
+    estilos = {
+        'disco_escritura_binario': ('C0', 'o', '-',  'Escritura binaria'),
+        'disco_lectura_binario':   ('C0', 's', '--', 'Lectura binaria'),
+        'disco_escritura_csv':     ('C1', 'o', '-',  'Escritura CSV'),
+        'disco_lectura_csv':       ('C1', 's', '--', 'Lectura CSV'),
+    }
+    
+    for esc, grp in resumen.groupby('escenario'):
+        color, marker, linestyle, label = estilos.get(esc, ('gray', '.', '-', esc))
+        ax.errorbar(grp['tamano_mb'], grp['throughput_mean'],
+                    yerr=grp['throughput_std'],
+                    marker=marker, linestyle=linestyle, color=color,
+                    capsize=4, linewidth=2, label=label)
+    
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('Tamaño de archivo (MB)')
+    ax.set_ylabel('Throughput (MB/s)')
+    ax.set_title('Disco: binario vs CSV (escritura y lectura)\n'
+                 'Binario limitado por SSD (~1.6 GB/s); CSV limitado por CPU (constante)')
+    ax.legend()
+    ax.grid(True, alpha=0.3, which='both')
+    fig.tight_layout()
+    fig.savefig(f"{output_dir}/04_disco_formatos.png", dpi=120, bbox_inches='tight')
+    plt.show()
