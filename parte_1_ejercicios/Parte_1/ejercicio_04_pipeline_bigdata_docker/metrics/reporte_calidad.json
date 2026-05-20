@@ -1,0 +1,85 @@
+{
+  "generado": "2026-05-20T17:18:50",
+  "fuentes": {
+    "lecturas_limpias": {
+      "filas_entrada": 10125,
+      "filas_validas": 9048,
+      "filas_descartadas": 1077,
+      "tasa_error_pct": 10.64,
+      "por_regla": {
+        "error_temperatura_fuera_rango": {
+          "total_invalidos": 129,
+          "porcentaje": 1.27
+        },
+        "error_humedad_fuera_rango": {
+          "total_invalidos": 126,
+          "porcentaje": 1.24
+        },
+        "error_sensor_id_nulo": {
+          "total_invalidos": 129,
+          "porcentaje": 1.27
+        },
+        "error_timestamp_futuro": {
+          "total_invalidos": 125,
+          "porcentaje": 1.23
+        },
+        "error_seeing_negativo": {
+          "total_invalidos": 127,
+          "porcentaje": 1.25
+        },
+        "error_presion_nivel_mar": {
+          "total_invalidos": 128,
+          "porcentaje": 1.26
+        },
+        "error_transparencia_invalida": {
+          "total_invalidos": 128,
+          "porcentaje": 1.26
+        },
+        "error_lectura_duplicada": {
+          "total_invalidos": 260,
+          "porcentaje": 2.57
+        },
+        "__resumen__": {
+          "total_filas": 10125,
+          "filas_validas": 9048,
+          "filas_invalidas": 1077,
+          "tasa_error_pct": 10.64
+        }
+      }
+    },
+    "eventos_limpios": {
+      "filas_entrada": 1020,
+      "filas_validas": 903,
+      "filas_descartadas": 117,
+      "tasa_error_pct": 11.47,
+      "por_regla": {
+        "error_instrumento_invalido": {
+          "total_invalidos": 21,
+          "porcentaje": 2.06
+        },
+        "error_declinacion_invalida": {
+          "total_invalidos": 20,
+          "porcentaje": 1.96
+        },
+        "error_timestamp_futuro": {
+          "total_invalidos": 20,
+          "porcentaje": 1.96
+        },
+        "error_sensor_id_nulo": {
+          "total_invalidos": 20,
+          "porcentaje": 1.96
+        },
+        "error_obs_id_duplicado": {
+          "total_invalidos": 40,
+          "porcentaje": 3.92
+        },
+        "__resumen__": {
+          "total_filas": 1020,
+          "filas_validas": 903,
+          "filas_invalidas": 117,
+          "tasa_error_pct": 11.47
+        }
+      }
+    }
+  }
+}

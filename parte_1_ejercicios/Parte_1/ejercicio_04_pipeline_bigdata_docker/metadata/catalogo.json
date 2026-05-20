@@ -1,0 +1,176 @@
+{
+  "version": "1.0",
+  "proyecto": "Pipeline Astronómico - INFB6074",
+  "observatorio": "Cerro Paranal (simulado), ESO Chile, 2635 m s.n.m.",
+  "fuentes": {
+    "lecturas_sensores": {
+      "descripcion": "Mediciones periódicas de condiciones ambientales (cada 5 min).",
+      "archivo_origen": "datos/lecturas_sensores.csv",
+      "archivo_bronze": "bronze/lecturas_raw.parquet",
+      "archivo_silver": "silver/lecturas_limpias.parquet",
+      "campos": [
+        {
+          "nombre": "sensor_id",
+          "tipo": "string",
+          "descripcion": "Identificador único del sensor.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "No nulo. Formato SENS-XXX."
+        },
+        {
+          "nombre": "timestamp",
+          "tipo": "datetime",
+          "descripcion": "Fecha y hora de la medición (UTC).",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "No nulo. No puede ser fecha futura."
+        },
+        {
+          "nombre": "ubicacion",
+          "tipo": "string",
+          "descripcion": "Posición cardinal del sensor en el observatorio.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "Valores: Norte, Sur, Este, Oeste, Centro."
+        },
+        {
+          "nombre": "temperatura_c",
+          "tipo": "float64",
+          "descripcion": "Temperatura ambiente en grados Celsius.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "Rango 14-20°C. Valor -999 indica falla del sensor."
+        },
+        {
+          "nombre": "humedad_pct",
+          "tipo": "float64",
+          "descripcion": "Humedad relativa en porcentaje.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "Rango 0-100%. Atacama típico: 3-20%."
+        },
+        {
+          "nombre": "velocidad_viento_ms",
+          "tipo": "float64",
+          "descripcion": "Velocidad del viento en metros por segundo.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": false,
+          "regla": "Valor >= 0."
+        },
+        {
+          "nombre": "presion_hpa",
+          "tipo": "float64",
+          "descripcion": "Presión atmosférica. A 2635 m ~ 745 hPa.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": false,
+          "regla": "Rango 700-900 hPa. >900 indica sensor descalibrado."
+        },
+        {
+          "nombre": "seeing_arcsec",
+          "tipo": "float64",
+          "descripcion": "Calidad óptica de la atmósfera (FWHM a 500 nm). Menor = mejor.",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": true,
+          "regla": "Valor > 0. Mediana histórica Paranal: ~0.64 arcsec."
+        },
+        {
+          "nombre": "transparencia",
+          "tipo": "float64",
+          "descripcion": "Fracción de luz transmitida por la atmósfera [0, 1].",
+          "fuente": "lecturas_sensores.csv",
+          "obligatorio": false,
+          "regla": "Rango 0.0-1.0. Valor >1 es físicamente imposible."
+        }
+      ]
+    },
+    "eventos_observacion": {
+      "descripcion": "Registro de eventos de observación telescópica.",
+      "archivo_origen": "datos/eventos_observacion.jsonl",
+      "archivo_bronze": "bronze/eventos_raw.parquet",
+      "archivo_silver": "silver/eventos_limpios.parquet",
+      "campos": [
+        {
+          "nombre": "obs_id",
+          "tipo": "string",
+          "descripcion": "Identificador único de la observación.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "No nulo. Único. Formato OBS-YYYY-XXXX."
+        },
+        {
+          "nombre": "sensor_id",
+          "tipo": "string",
+          "descripcion": "Telescopio que realizó la observación.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "No nulo."
+        },
+        {
+          "nombre": "timestamp",
+          "tipo": "datetime",
+          "descripcion": "Fecha y hora de inicio de la observación (UTC).",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "No nulo. No puede ser fecha futura."
+        },
+        {
+          "nombre": "objeto_observado",
+          "tipo": "string",
+          "descripcion": "Nombre del objeto celeste observado.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "No nulo."
+        },
+        {
+          "nombre": "magnitud",
+          "tipo": "float64",
+          "descripcion": "Magnitud aparente del objeto observado.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": false,
+          "regla": "Rango típico: -1.5 a 15.0."
+        },
+        {
+          "nombre": "ascension_recta",
+          "tipo": "float64",
+          "descripcion": "Ascensión recta del objeto en grados.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": false,
+          "regla": "Rango válido: 0.0 a 360.0°."
+        },
+        {
+          "nombre": "declinacion",
+          "tipo": "float64",
+          "descripcion": "Declinación del objeto en grados.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": false,
+          "regla": "Rango válido: -90.0 a +90.0°."
+        },
+        {
+          "nombre": "duracion_min",
+          "tipo": "int32",
+          "descripcion": "Duración de la observación en minutos.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "Valor > 0."
+        },
+        {
+          "nombre": "instrumento",
+          "tipo": "string",
+          "descripcion": "Instrumento utilizado en la observación.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "Valores: CCD, Espectrógrafo, Fotómetro."
+        },
+        {
+          "nombre": "estado",
+          "tipo": "string",
+          "descripcion": "Resultado de la observación.",
+          "fuente": "eventos_observacion.jsonl",
+          "obligatorio": true,
+          "regla": "Valores: completada, fallida, cancelada."
+        }
+      ]
+    }
+  },
+  "generado": "2026-05-20T17:18:50"
+}

@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+# Datos y resultados — se montan en runtime, no se copian
+datos/
+bronze/
+silver/
+gold/
+metadata/
+metrics/
+
+# macOS
+.DS_Store
+
+# Scripts de soporte que no necesita el contenedor
+generar_datos.py
+entorno.py
