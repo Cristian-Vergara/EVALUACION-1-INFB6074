@@ -1,0 +1,13 @@
+# Entorno virtual
+.venv/
+__pycache__/
+*.pyc
+
+# Datos — se montan en runtime con -v
+datos/
+
+# macOS
+.DS_Store
+
+# README no necesita estar en la imagen
+README.md
