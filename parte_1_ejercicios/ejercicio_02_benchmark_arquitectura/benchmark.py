@@ -157,102 +157,105 @@ def benchmark_cpu(verbose=True):
     return registros
 
 # ============================================================
-# Escenarios B y C: Memoria (matriz 2D, filas vs columnas)
+# Escenarios B y C: Memoria (secuencial vs strided vs aleatorio)
+# El enunciado pide (b) acceso secuencial y (c) acceso aleatorio.
+# Se añade además 'strided' (columnas) como caso intermedio ilustrativo.
 # ============================================================
 
-def sumar_por_filas(mat):
-    """Suma todos los elementos recorriendo fila por fila.
-    Cada fila es contigua en memoria (numpy guarda matrices row-major),
-    así que el acceso es secuencial y la caché lo predice perfectamente."""
-    total = 0.0
-    for i in range(mat.shape[0]):
-        total += mat[i].sum()
-    return total
+def sumar_con_indices(arr, indices):
+    """Suma arr[indices] de forma vectorizada (NumPy fancy indexing).
 
+    Esta es la ÚNICA primitiva de acceso usada por los tres patrones de
+    memoria (secuencial, strided y aleatorio). Lo único que cambia entre
+    ellos es el ORDEN del vector 'indices'; el método de acceso es idéntico.
+    Así la comparación es justa: la diferencia de tiempo se debe al patrón
+    de localidad y no a usar bucles de Python en un caso y NumPy en otro."""
+    return arr[indices].sum()
 
-def sumar_por_columnas(mat):
-    """Suma todos los elementos recorriendo columna por columna.
-    Cada columna NO es contigua en memoria: hay un salto de N*8 bytes
-    entre cada elemento. Eso fuerza cache misses constantes."""
-    total = 0.0
-    for j in range(mat.shape[1]):
-        total += mat[:, j].sum()
-    return total
 
 def benchmark_memoria(verbose=True):
     """
-    Corre el escenario memoria completo: para cada tamaño de matriz,
-    8 repeticiones de acceso por filas + 8 repeticiones por columnas.
-    
-    La matriz se crea UNA VEZ por tamaño (afuera de medir) y se reusa
-    para ambos patrones, garantizando que la única diferencia entre
-    secuencial y aleatorio es el patrón de acceso.
+    Corre el escenario memoria completo. Para cada tamaño de arreglo se
+    miden TRES patrones de acceso, cada uno con 8 repeticiones:
+
+      - memoria_secuencial : índices en orden 0,1,2,...  (localidad perfecta)
+      - memoria_strided    : índices a paso fijo N (equivale a recorrer por
+                             columnas una matriz row-major: predecible pero
+                             rompe la línea de caché)
+      - memoria_aleatorio  : índices BARAJADOS (orden impredecible que
+                             derrota al prefetcher: peor caso de localidad)
+
+    Los tres usan la misma primitiva (sumar_con_indices) sobre el MISMO
+    arreglo 1D, creado una sola vez por tamaño. Los vectores de índices se
+    construyen también una sola vez (fuera de la medición), de modo que lo
+    único cronometrado es el patrón de acceso.
     """
     registros = []
     n_reps = 8
     cooldown_s = 10
-    
-    # Calculamos cuántas mediciones totales para saber cuándo es la última
-    total_mediciones = len(LADOS_MATRIZ) * 2 * n_reps
+    rng = np.random.default_rng(42)  # reproducibilidad del barajado
+
+    patrones = ["memoria_secuencial", "memoria_strided", "memoria_aleatorio"]
+    total_mediciones = len(LADOS_MATRIZ) * len(patrones) * n_reps
     contador = 0
-    
+
     for n in LADOS_MATRIZ:
         elementos = n * n
         size_mb = elementos * 8 / (1024**2)
-        
+
         if verbose:
-            print(f"\n[MEM] Matriz {n}×{n}  ({elementos:,} elementos, {size_mb:.1f} MB)")
-        
-        # Asignar la matriz UNA VEZ (afuera de medir)
+            print(f"\n[MEM] Arreglo {elementos:,} elementos ({size_mb:.1f} MB)")
+
+        # Arreglo de datos: UNA sola vez por tamaño
         gc.collect()
-        mat = np.arange(elementos, dtype=np.float64).reshape(n, n)
-        
-        # --- 8 reps acceso por filas ---
-        if verbose:
-            print("  Acceso por filas (secuencial en memoria):")
-        for rep in range(1, n_reps + 1):
-            m = medir(sumar_por_filas, mat)
-            registros.append({
-                "escenario":         "memoria_filas",
-                "tamano_n":          n,
-                "tamano_elementos":  elementos,
-                "tamano_mb":         size_mb,
-                "repeticion":        rep,
-                "tiempo_s":          m["tiempo_s"],
-                "memoria_delta_mb":  m["memoria_delta_mb"],
-                "throughput_mb_s":   size_mb / m["tiempo_s"],
-            })
-            contador += 1
+        arr = np.arange(elementos, dtype=np.float64)
+
+        # Vectores de índices: UNA sola vez por tamaño (fuera de medir)
+        idx_secuencial = np.arange(elementos)
+        # 'strided': recorre como si fueran columnas de una matriz n×n
+        #   (col 0 completa, luego col 1, ...) -> saltos regulares de n
+        idx_strided = np.arange(elementos).reshape(n, n).T.reshape(-1).copy()
+        # 'aleatorio': permutación barajada de todas las posiciones
+        idx_aleatorio = rng.permutation(elementos)
+
+        indices_por_patron = {
+            "memoria_secuencial": idx_secuencial,
+            "memoria_strided":    idx_strided,
+            "memoria_aleatorio":  idx_aleatorio,
+        }
+
+        etiquetas = {
+            "memoria_secuencial": "Acceso secuencial (orden contiguo)",
+            "memoria_strided":    "Acceso strided (saltos regulares = columnas)",
+            "memoria_aleatorio":  "Acceso aleatorio (índices barajados)",
+        }
+
+        for patron in patrones:
+            indices = indices_por_patron[patron]
             if verbose:
-                print(f"    rep {rep}/{n_reps}: {m['tiempo_s']:.4f} s")
-            if contador < total_mediciones:
-                time.sleep(cooldown_s)
-        
-        # --- 8 reps acceso por columnas ---
-        if verbose:
-            print("  Acceso por columnas (con saltos en memoria):")
-        for rep in range(1, n_reps + 1):
-            m = medir(sumar_por_columnas, mat)
-            registros.append({
-                "escenario":         "memoria_columnas",
-                "tamano_n":          n,
-                "tamano_elementos":  elementos,
-                "tamano_mb":         size_mb,
-                "repeticion":        rep,
-                "tiempo_s":          m["tiempo_s"],
-                "memoria_delta_mb":  m["memoria_delta_mb"],
-                "throughput_mb_s":   size_mb / m["tiempo_s"],
-            })
-            contador += 1
-            if verbose:
-                print(f"    rep {rep}/{n_reps}: {m['tiempo_s']:.4f} s")
-            if contador < total_mediciones:
-                time.sleep(cooldown_s)
-        
-        # Liberar matriz antes de pasar al siguiente tamaño
-        del mat
+                print(f"  {etiquetas[patron]}:")
+            for rep in range(1, n_reps + 1):
+                m = medir(sumar_con_indices, arr, indices)
+                registros.append({
+                    "escenario":         patron,
+                    "tamano_n":          n,
+                    "tamano_elementos":  elementos,
+                    "tamano_mb":         size_mb,
+                    "repeticion":        rep,
+                    "tiempo_s":          m["tiempo_s"],
+                    "memoria_delta_mb":  m["memoria_delta_mb"],
+                    "throughput_mb_s":   size_mb / m["tiempo_s"],
+                })
+                contador += 1
+                if verbose:
+                    print(f"    rep {rep}/{n_reps}: {m['tiempo_s']:.4f} s")
+                if contador < total_mediciones:
+                    time.sleep(cooldown_s)
+
+        # Liberar antes del siguiente tamaño
+        del arr, idx_secuencial, idx_strided, idx_aleatorio
         gc.collect()
-    
+
     return registros
 
 # ============================================================
@@ -439,30 +442,37 @@ def graficar_cpu(df_cpu, output_dir="visualizaciones"):
 
 
 def graficar_memoria(df_mem, output_dir="visualizaciones"):
-    """Acceso secuencial (filas) vs no-secuencial (columnas)."""
+    """Tres patrones de acceso a memoria: secuencial vs strided vs aleatorio."""
     Path(output_dir).mkdir(exist_ok=True)
-    
+
     resumen = df_mem.groupby(['escenario', 'tamano_mb']).agg(
         throughput_mean=('throughput_mb_s', 'mean'),
         throughput_std=('throughput_mb_s', 'std'),
     ).reset_index()
-    
+
+    estilos = {
+        'memoria_secuencial': ('C2', 'o', '-',  'Secuencial (contiguo)'),
+        'memoria_strided':    ('C1', 's', '--', 'Strided (columnas)'),
+        'memoria_aleatorio':  ('C3', '^', ':',  'Aleatorio (barajado)'),
+    }
+
     fig, ax = plt.subplots(figsize=(9, 6))
     for esc, grp in resumen.groupby('escenario'):
-        nombre = esc.replace('memoria_', '').capitalize()
+        color, marker, linestyle, label = estilos.get(esc, ('gray', '.', '-', esc))
         ax.errorbar(grp['tamano_mb'], grp['throughput_mean'],
                     yerr=grp['throughput_std'],
-                    marker='o', capsize=4, linewidth=2, label=nombre)
-    
+                    marker=marker, linestyle=linestyle, color=color,
+                    capsize=4, linewidth=2, label=label)
+
     # Línea de referencia en L2 cache (~16 MB)
-    ax.axvline(x=16, color='red', linestyle=':', alpha=0.5, label='Caché L2 (~16 MB)')
-    
+    ax.axvline(x=16, color='gray', linestyle=':', alpha=0.5, label='Caché L2 (~16 MB)')
+
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel('Tamaño de matriz (MB)')
+    ax.set_xlabel('Tamaño del arreglo (MB)')
     ax.set_ylabel('Throughput (MB/s)')
-    ax.set_title('Memoria: acceso secuencial (filas) vs no-secuencial (columnas)\n'
-                 'Gap entre curvas crece más allá de L2 → jerarquía de memoria visible')
+    ax.set_title('Memoria: secuencial vs strided vs aleatorio\n'
+                 'El acceso aleatorio derrota al prefetcher → peor caso de localidad')
     ax.legend()
     ax.grid(True, alpha=0.3, which='both')
     fig.tight_layout()
